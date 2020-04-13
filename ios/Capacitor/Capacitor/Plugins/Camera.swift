@@ -241,7 +241,7 @@ public class CAPCameraPlugin : CAPPlugin, UIImagePickerControllerDelegate, UINav
       }
     }
     
-    guard let jpeg = image!.jpegData(compressionQuality: CGFloat(settings.quality/100)) else {
+    guard let jpeg = addMetadataToImage( image!, metaData: imageMetadata) else {
       self.call?.error("Unable to convert image to jpeg")
       return
     }
@@ -325,7 +325,10 @@ public class CAPCameraPlugin : CAPPlugin, UIImagePickerControllerDelegate, UINav
   }
 
   func makeExif(_ exif: [AnyHashable:Any]?) -> [AnyHashable:Any]? {
-    return exif?["{Exif}"] as? [AnyHashable:Any]
+    var exifData = exif?["{Exif}"] as? [AnyHashable:Any]
+    exifData?["Orientation"] = exif?["Orientation"]
+    exifData?["GPS"] = exif?["{GPS}"]
+    return exifData
   }
 
   func correctOrientation(_ image: UIImage) -> UIImage? {
@@ -374,6 +377,23 @@ public class CAPCameraPlugin : CAPPlugin, UIImagePickerControllerDelegate, UINav
     }
 
     return nil
+  }
+    
+  func addMetadataToImage(_ image:UIImage, metaData: [AnyHashable : Any])->Data?  {
+    // Creating jpgData from UIImage (1 = original quality)
+    guard let jpgData = image.jpegData(compressionQuality: CGFloat(settings.quality/100)) else { return nil }
+
+    // Adding metaData to jpgData
+    guard let source = CGImageSourceCreateWithData(jpgData as CFData, nil), let uniformTypeIdentifier = CGImageSourceGetType(source) else {
+        return jpgData
+    }
+
+    let finalData = NSMutableData(data: jpgData)
+    guard let destination = CGImageDestinationCreateWithData(finalData, uniformTypeIdentifier, 1, nil) else { return jpgData }
+    CGImageDestinationAddImageFromSource(destination, source, 0, metaData as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return jpgData }
+
+    return finalData as Data
   }
 
 }
